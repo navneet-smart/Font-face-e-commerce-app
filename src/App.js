@@ -126,7 +126,7 @@ class App extends Component {
           {
             this.state.products.map((product , index)=>(
               <div className = "grid" key = {index}>
-                <div className = "fontface" >{product.face}</div>
+                <div className = "fontface" style = {{fontSize : product.size}} >{product.face}</div>
                 <div className = "bottomsheet" >
                 <div className = "pricetag">{currenncy} {this.priceFormatter(product.price)}</div>
                 <div className = "sizetag" >Size: {product.size} Pixels</div>
