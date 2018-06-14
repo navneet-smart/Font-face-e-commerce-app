@@ -1,62 +1,87 @@
 import React, { Component } from 'react';
-import logo from './logo.svg';
 import './App.css';
-const ip = "192.168.1.11";
+//console.log(process.env)
+const ip = process.env.REACT_APP_IP;
 const BaseUrl = "http://"+ip+":4000/products?";
 const limit = 20;
-const currenncy = '$';
-const sortOrders = [{name : "Size" , value : "size"} , {name : "Price" , value : "price"} , {name : "Id" , value : "id"}];
+const currenncy = process.env.REACT_APP_CURRENCY || '$';
+const sortOrders = [{name : "Size" , value : "size"} , {name : "Price" , value : "price"} , {name : "Date" , value : "date"} , {name : "ID" , value : "id"}];
 let prePage = 1;
-
+let preloaded = [];
 class App extends Component {
 
   constructor(){
     super();
     this.state = {
-      products : []
+      products : [],
+      noMore : false
     };
 
     this.handleScroll = this.handleScroll.bind(this);
     this.handleOrderChange = this.handleOrderChange.bind(this);
-    this.loadProducts = this.loadProducts.bind(this);
   }
 
   componentWillMount(){
-      this.loadProducts(1);
+     this.init();
   }
 
   componentDidMount(){
     window.addEventListener("scroll", this.handleScroll);
   }
 
-  loadProducts(page){
-    prePage = page;
+  init(){
+    this.loadPage(1)
+     .then((products)=>{
+      this.updateProducts(products);
+      this.preloadProducts(2);
+     });
+  }
+
+  updateProducts(products){
+    let noMore = products.length == 0;
+    if(noMore){
+      this.setState({noMore});
+    }
+    else{
+      let newData = this.state.products.concat(products),
+        sortKey = this.state.selectedOrder;
+        if(sortKey)
+          newData = newData.sort((a , b)=>{ return sortKey === 'date' ? new Date(a[sortKey]) - new Date(b[sortKey]) : a[sortKey] - b[sortKey]});
+        this.setState({products : newData});
+    }
+   }
+
+  preloadProducts(page){
+    this.loadPage(page)
+    .then((products)=>{
+      preloaded = products;
+      console.log(preloaded);
+    })
+  }
+
+  getPreloadedProducts(page){
+    this.updateProducts(preloaded);
+    this.preloadProducts(page);
+  }
+
+  loadPage(page){
     console.log(BaseUrl + "_page=" + page + "&_limit=" + limit)
-    fetch(BaseUrl + "_page=" + page + "&_limit=" + limit)
+    return fetch(BaseUrl + "_page=" + page + "&_limit=" + limit)
     .then((response)=> {
       return response.json();
     })
-    .then((jsondata)=>{
-        //if(jsondata.length)
-          let newData = this.state.products.concat(jsondata),
-          sortKey = this.state.selectedOrder;
-          if(sortKey)
-            newData = newData.sort((a , b)=>{ return a[sortKey] - b[sortKey]});
-          console.log(sortKey)
-          this.setState({products : newData});
-    })
-    .catch((error)=>console.log(error))
+    .catch((error)=> {return error})
   }
 
   nextpage(){
-    return ((this.state.products.length / limit) + 1);
+    return ((this.state.products.length / limit) + 2);
   }
 
   handleScroll(event){ 
     if ((window.innerHeight + window.pageYOffset) >= document.body.offsetHeight) {
           let page = this.nextpage();
-          if(page > prePage)
-           this.loadProducts(page);
+          if(page > prePage && !this.state.noMore)
+           this.getPreloadedProducts(page);
     } 
     
   }
@@ -66,9 +91,33 @@ class App extends Component {
     console.log(order)
     this.setState({
       selectedOrder: order,
-      products:[]
-    },()=>this.loadProducts(1));
-    
+      products:[],
+      noMore:false
+    },()=>this.init());
+  }
+
+  dateFormatter(date){
+    let from = new Date(date).getTime(),
+    now = new Date().getTime(),
+    msInDay = 24 * 60 * 60 * 1000,
+    differenceInMs = Math.abs(from - now),
+    daysAgo = Math.round(differenceInMs/msInDay);
+    let formatedDate;
+    if(daysAgo < 7){
+      formatedDate =  daysAgo + 'days ago';
+    }
+    else{
+      let d = new Date(from);
+      const monthList = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul","Aug", "Sep", "Oct", "Nov", "Dec"];
+      formatedDate =  d.getDate() +" "+ monthList[d.getMonth()] +" "+ d.getFullYear();
+    }
+
+    return formatedDate;
+
+  }
+
+  priceFormatter(price){
+    return Number(price/100).toFixed(2);
   }
 
   renderProducts(){
@@ -77,9 +126,12 @@ class App extends Component {
           {
             this.state.products.map((product , index)=>(
               <div className = "grid" key = {index}>
-                {product.face}
-                <div>{currenncy} {product.price}</div>
-                <div>Size: {product.size}</div>
+                <div className = "fontface" >{product.face}</div>
+                <div className = "bottomsheet" >
+                <div className = "pricetag">{currenncy} {this.priceFormatter(product.price)}</div>
+                <div className = "sizetag" >Size: {product.size} Pixels</div>
+                <div className = "datetag" >Uploaded {this.dateFormatter(product.date)}</div>
+                </div>
               </div>
 
             ))
@@ -97,7 +149,7 @@ class App extends Component {
           <div key = {index} className = "item">
             <label>
               <input type = "radio" name = "sort" value = {order.value} checked={this.state.selectedOrder === order.value}  onChange={this.handleOrderChange} />
-              {order.name}
+              <span className = "radiolabel" >{order.name}</span>
             </label>
           </div>
         ))}
@@ -117,9 +169,9 @@ class App extends Component {
           </div>
           <div className = "col col-80">
             {this.renderProducts()}
+            {this.state.noMore ? <div className = "nomoretag" >~ End of catalogue ~</div> : <div className = "loader" ></div>}
           </div>
         </div>
-        <div className = "loader" ></div>
       </div>
     );
   }
